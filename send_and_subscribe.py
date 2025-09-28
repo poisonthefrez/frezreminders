@@ -1,7 +1,7 @@
 import os
 import json
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 API_URL = f"https://api.telegram.org/bot{TOKEN}"
@@ -9,6 +9,7 @@ API_URL = f"https://api.telegram.org/bot{TOKEN}"
 SUBSCRIBERS_FILE = "subscribers.json"
 OFFSET_FILE = "offset.txt"
 SCHEDULE_FILE = "schedule.json"
+SENT_FILE = "sent_recent.json"  # Хранит id сообщений, отправленных за последние 15 минут
 
 def load_json(filename, default):
     if not os.path.exists(filename):
@@ -33,6 +34,7 @@ def get_updates(offset):
 def main():
     subscribers = load_json(SUBSCRIBERS_FILE, [])
     schedule = load_json(SCHEDULE_FILE, [])
+    sent_recent = load_json(SENT_FILE, [])
     offset = 0
     if os.path.exists(OFFSET_FILE):
         try:
@@ -53,41 +55,36 @@ def main():
                     subscribers.append({"chat_id": chat_id, "welcome_sent": True})
                     send_message(chat_id, "✅ Подписка оформлена!")
             elif text.lower() == "/stop" and chat_id:
-                if chat_id in subscribers:
-                    subscribers.remove(chat_id)
-                    send_message(chat_id, "❌ Подписка отменена. Больше уведомлений не будет.")
+                subscribers = [s for s in subscribers if s["chat_id"] != chat_id]
+                send_message(chat_id, "❌ Подписка отменена. Больше уведомлений не будет.")
 
-    # Проверка расписания
+    # Проверка расписания с окном 15 минут
     now = datetime.utcnow()
-    today_str = now.strftime("%Y-%m-%d")
-    time_str = now.strftime("%H:%M")
-    day_of_week = now.strftime("%a")  # Mon, Tue, ...
+    window = timedelta(minutes=15)
 
     for item in schedule:
-        msg_time = item.get("time")
-        if not msg_time:
+        msg_time_str = item.get("time")
+        if not msg_time_str:
             continue
 
-        should_send = False
+        # Проверяем все даты (одна дата или список)
+        dates_to_check = []
+        if "date" in item:
+            dates_to_check.append(item["date"])
+        if "dates" in item:
+            dates_to_check.extend(item["dates"])
 
-        # одноразовая дата
-        if "date" in item and item["date"] == today_str and msg_time == time_str:
-            should_send = True
-
-        # список дат
-        if "dates" in item and today_str in item["dates"] and msg_time == time_str:
-            should_send = True
-
-        # дни недели
-        if "days" in item and day_of_week in item["days"] and msg_time == time_str:
-            should_send = True
-
-        if should_send:
-            for chat_id in subscribers:
-                send_message(chat_id, item["text"])
+        for d in dates_to_check:
+            msg_datetime = datetime.strptime(f"{d} {msg_time_str}", "%Y-%m-%d %H:%M")
+            # Если текущее время в пределах окна 15 минут и сообщение ещё не отправлено
+            if msg_datetime <= now <= msg_datetime + window and item["id"] not in sent_recent:
+                for sub in subscribers:
+                    send_message(sub["chat_id"], item["text"])
+                sent_recent.append(item["id"])
 
     # Сохраняем данные
     save_json(SUBSCRIBERS_FILE, subscribers)
+    save_json(SENT_FILE, sent_recent)
     with open(OFFSET_FILE, "w") as f:
         f.write(str(offset))
 
