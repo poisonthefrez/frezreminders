@@ -1,9 +1,9 @@
 name: Reminders Bot
 
 on:
-  schedule:
-    - cron: '*/5 * * * *'
-  workflow_dispatch: {}
+  # schedule:
+  #   - cron: '*/5 * * * *'  # временно отключаем
+  workflow_dispatch: {}      # ручной запуск остаётся
 
 jobs:
   run:
