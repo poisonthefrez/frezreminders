@@ -49,9 +49,9 @@ def main():
             text = msg.get("text","")
             chat_id = msg.get("chat",{}).get("id")
             if text.lower() == "/start" and chat_id:
-                if chat_id not in subscribers:
-                    subscribers.append(chat_id)
-                    send_message(chat_id, "✅ Подписка оформлена! Теперь вы получаете уведомления.")
+                if chat_id not in [s["chat_id"] for s in subscribers]:
+                    subscribers.append({"chat_id": chat_id, "welcome_sent": True})
+                    send_message(chat_id, "✅ Подписка оформлена!")
             elif text.lower() == "/stop" and chat_id:
                 if chat_id in subscribers:
                     subscribers.remove(chat_id)
